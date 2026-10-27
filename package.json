@@ -1,0 +1,32 @@
+{
+  "name": "medix-whatsapp-delivery",
+  "version": "1.0.0",
+  "description": "Production-ready Node.js Express WhatsApp order-automation server for Medix Pharmacy Delivery",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test tests/**/*.test.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "meta-cloud-api",
+    "pharmacy-bot",
+    "order-automation",
+    "google-sheets",
+    "google-drive",
+    "gemini",
+    "claude"
+  ],
+  "author": "Medix Pharmacy Delivery",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.8.4",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "googleapis": "^146.0.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
+  }
+}

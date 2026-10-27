@@ -1,0 +1,23 @@
+{
+  "918101402916": {
+    "phone": "918101402916",
+    "lang": "bn",
+    "state": "START",
+    "order": {
+      "orderId": null,
+      "orderType": "",
+      "medicines": "",
+      "fileLinks": [],
+      "customerName": "",
+      "address": "",
+      "mapLink": "",
+      "phone": "",
+      "notes": ""
+    },
+    "editingField": null,
+    "lastActivity": 1793089426361,
+    "rateLimitWindowStart": 1793089408421,
+    "rateLimitCount": 2,
+    "returnState": null
+  }
+}

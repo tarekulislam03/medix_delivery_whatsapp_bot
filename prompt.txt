@@ -1,0 +1,102 @@
+Build a production-ready Node.js (Express) WhatsApp order-taking server for "Medix Pharmacy Delivery". It must be a BUTTON-DRIVEN, rule-based bot (like Flipkart's WhatsApp bot). NO AI/LLM. Use the Meta WhatsApp Cloud API interactive messages (reply buttons and list messages). Save orders to Google Sheets and files to Google Drive.
+
+TECH STACK
+Node.js 20+, Express, axios, googleapis, dotenv, pino. Google service account for Sheets and Drive.
+
+WHATSAPP LIMITS TO RESPECT
+- Reply buttons: max 3 buttons, title max 20 chars.
+- List message: max 10 rows, row title max 24 chars, row description max 72 chars, list button label max 20 chars.
+- Body text max 1024 chars.
+
+CONVERSATION FLOW (state machine, state stored per WhatsApp number)
+
+State START (any first message, or the words "hi", "hello", "menu", "start"):
+ Send buttons: "Welcome to Medix Pharmacy Delivery. How can we help you?"
+ [Order Medicine] [Track Order] [Talk to Team]
+
+Order Medicine -> send a LIST message "How would you like to order?" with rows:
+ 1. Type medicine name
+ 2. Upload prescription
+ 3. Send voice message
+ 4. Send strip photo
+ 5. Back to menu
+
+Then per choice:
+ - Type medicine name: state WAIT_TEXT_ORDER. Ask "Please type the medicine name(s) and quantity. Example: Paracetamol 500mg - 2 strips". Accept text only.
+ - Upload prescription: state WAIT_PRESCRIPTION. Ask for a clear photo of the prescription. Accept image or PDF document. Allow multiple files: after each file, send buttons [Add more] [Done].
+ - Send voice message: state WAIT_VOICE. Ask them to record and send a voice message listing the medicines. Accept audio only.
+ - Send strip photo: state WAIT_STRIP. Ask for a photo of the medicine strip or box. Accept images. Allow multiple, with [Add more] [Done].
+ - If the user sends the wrong type (e.g. text when an image is expected), reply "Please send a [expected type]" and show buttons [Back to menu].
+
+After the order input is received, collect the details one by one:
+ 1. State ASK_NAME: "Please enter your full name".
+ 2. State ASK_ADDRESS: "Please enter your full delivery address (house no, street, landmark, pincode)". Also accept a WhatsApp location pin; if received, save the latitude/longitude and the Google Maps link, then still ask for the landmark in text.
+ 3. State ASK_PHONE: "Please enter your contact number". Send buttons [Use this WhatsApp number] [Enter another number]. Validate Indian 10-digit mobile numbers (allow +91 or 0 prefix, normalise to 10 digits). If invalid, ask again.
+ - Validate name (min 2 chars) and address (min 10 chars). If invalid, re-ask with a short hint.
+
+State CONFIRM: send a summary message:
+ Order type, medicines (or "Prescription attached" / "Voice message attached" / "Strip photo attached"), name, address, phone.
+ Buttons: [Confirm Order] [Edit Details] [Cancel]
+ - Edit Details -> list: Name, Address, Phone, Medicines. Go to that step, then return to CONFIRM.
+ - Cancel -> clear the session and show the main menu.
+ - Confirm Order -> save to Google Sheets, then send:
+   "Thank you! Your order ID is MDX-XXXXXX. We'll confirm the price very soon."
+   Then buttons [Order Again] [Track Order].
+
+Track Order:
+ Ask "Enter your Order ID", or list the customer's last 3 orders (matched by WhatsApp number) as list rows. Look up the Google Sheet and reply with the Status column (e.g. Pending price confirmation, Price confirmed, Out for delivery, Delivered, Cancelled) and the Price column if filled.
+
+Talk to Team:
+ Reply "Our team will contact you shortly" and send buttons [Back to menu]. Log the request in a "Support" sheet tab (timestamp, number, state). Optionally forward an alert to ADMIN_WHATSAPP_NUMBER.
+
+GLOBAL RULES
+ - Typing "menu", "restart" or "cancel" at any time resets the session and shows the main menu.
+ - If the user sends an unexpected message in any state, repeat the current question (don't crash).
+ - A session expires after 24 hours of inactivity. A new message then starts at START.
+ - Always handle a button/list reply by its ID, not by its title text. Use clear IDs like "menu_order", "order_text", "confirm_yes".
+ - Never state or guess any price.
+
+WEBHOOK
+ - GET /webhook: Meta verification with WHATSAPP_VERIFY_TOKEN.
+ - POST /webhook: return 200 immediately, process asynchronously. Verify the X-Hub-Signature-256 header with the app secret. Ignore status updates. Dedupe by message ID. Process messages per user sequentially.
+ - Handle message types: text, interactive (button_reply, list_reply), image, audio, document, location. Mark messages as read.
+
+MEDIA HANDLING
+ - For image, audio and document: get the media URL from the Graph API using the media ID, download it with the access token, upload to a Drive folder (subfolder per Order ID, or a temp folder until confirmed), and store the shareable link in the session.
+ - Do not transcribe or analyse anything. The pharmacist listens to voice messages and reads prescriptions manually.
+ - Supported voice formats: ogg/opus from WhatsApp. Keep the original file.
+
+GOOGLE SHEETS
+ Tab "Orders", columns in this order:
+ A Order ID | B Timestamp (IST) | C WhatsApp Number | D Customer Name | E Phone | F Address | G Map Link | H Order Type | I Medicines (text) | J File Links | K Status | L Price | M Notes
+ - Order ID format MDX-YYMMDD-XXXX (random 4 chars, check for uniqueness).
+ - Status defaults to "Pending price confirmation". Price is empty and filled manually by the pharmacy.
+ - Append with retries (3 times, backoff).
+ Tab "Support": Timestamp, WhatsApp Number, Note.
+
+PRICE-CONFIRMED NOTIFICATION (feature)
+ - Add a POST /notify endpoint (protected by an API key header) that takes an Order ID, reads the order from the Sheet, and sends the customer a message with the price and buttons [Confirm Delivery] [Cancel Order].
+ - Note: this message may be outside the 24-hour customer service window, so it must be sent with an approved TEMPLATE message. Build the template sender and include the template JSON for me to submit in Meta (utility category, with variables for name, order ID and price).
+ - Also add an optional Google Apps Script snippet for the sheet: when the Price column is edited, call /notify.
+
+SESSION STORAGE
+ - Use an in-memory Map for now, behind a small interface (get/set/delete) so I can swap to Redis later. Persist sessions to a local JSON file every 30 seconds so a restart doesn't lose in-progress orders.
+
+ROBUSTNESS
+ - Rate-limit each number (20 messages/minute).
+ - If Sheets/Drive/WhatsApp calls fail, log with context and tell the customer: "Sorry, something went wrong. Please try again in a moment." Never lose a confirmed order: if the Sheets save fails, write the order to a local failed-orders.json and retry in the background.
+ - Do not log tokens or full customer data. Log only the phone number and message ID.
+ - /health endpoint, graceful shutdown, global error handler.
+
+CONFIG (.env.example)
+ WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID, GOOGLE_DRIVE_FOLDER_ID, NOTIFY_API_KEY, ADMIN_WHATSAPP_NUMBER, PORT
+
+PROJECT STRUCTURE
+ src/index.js, src/routes/webhook.js, src/flow/{states,handlers,messages}.js, src/services/{whatsapp,sheets,drive,session}.js, src/utils/{logger,validators}.js, README.md, .env.example
+ - Keep all bot texts and button labels in src/flow/messages.js so I can edit them easily, and add Bengali and Hindi versions with a language selection at the start (buttons: [English] [বাংলা] [हिन्दी]), stored per session.
+
+DELIVERABLES
+ - Complete working code for every file with clear comments.
+ - README: Meta app + WhatsApp Cloud API setup, Google service account setup (share the Sheet and Drive folder with it), local testing with ngrok, deployment on a VPS with PM2 + HTTPS, and how to submit the message template.
+ - Unit tests for the validators and the state machine transitions.
+ - Keep the code simple and readable.

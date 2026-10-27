@@ -1,0 +1,42 @@
+{
+  "name": "medix_price_confirmation",
+  "category": "UTILITY",
+  "language": "en",
+  "components": [
+    {
+      "type": "HEADER",
+      "format": "TEXT",
+      "text": "Medix Pharmacy Delivery"
+    },
+    {
+      "type": "BODY",
+      "text": "Hello {{1}}, the price for your medicine order {{2}} has been confirmed: {{3}}. Please confirm if you would like us to proceed with delivery.",
+      "example": {
+        "body_text": [
+          [
+            "Rahul Sharma",
+            "MDX-261027-A1B2",
+            "₹350"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "Medix Pharmacy - Delivering Health to Your Doorstep"
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        {
+          "type": "QUICK_REPLY",
+          "text": "Confirm Delivery"
+        },
+        {
+          "type": "QUICK_REPLY",
+          "text": "Cancel Order"
+        }
+      ]
+    }
+  ]
+}
